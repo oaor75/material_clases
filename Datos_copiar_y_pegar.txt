@@ -1,0 +1,23 @@
+DATOS PARA COPIAR Y PEGAR
+
+/*/*/*/*/*/**/*/*/*/*/*/**
+Instalar easyPanel
+/*/*/*/*/*/**/*/*/*/*/*/**
+
+
+curl -fsSL https://get.docker.com | sudo bash
+
+
+/*/*/*/*/*/**/*/*/*/*/*/**
+
+sudo docker run --rm -it \
+  -v /etc/easypanel:/etc/easypanel \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  easypanel/easypanel setup
+
+/*/*/*/*/*/**/*/*/*/*/*/**
+
+http://IP-DE-TU-SERVIDOR:3000
+
+
+/*/*/*/*/*/**/*/*/*/*/*/**
