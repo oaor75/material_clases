@@ -1,13 +1,25 @@
-DATOS PARA COPIAR Y PEGAR
+DATOS PARA COPIAR Y PEGAR CONSOLA AWS PARA INSTALAR EASYPANEL Y LUEGO N8N
 
 /*/*/*/*/*/**/*/*/*/*/*/**
 Instalar easyPanel
 /*/*/*/*/*/**/*/*/*/*/*/**
+(No copiar lo que está con / o * siempre seleccionar y pegar con el mouse)
 
+/*/*/*/*/*/**/*/*/*/*/*/**
+PARA CONVERTIRTE EN ROOT O DAR INSTRUCCIONES COMO ROOT
+/*/*/*/*/*/**/*/*/*/*/*/**
+
+sudo -i
+
+/*/*/*/*/*/**/*/*/*/*/*/**
+PARA INSTALAR EL DOCKER Y PODER HACER OTRAS INSTALACIONES
+/*/*/*/*/*/**/*/*/*/*/*/**
 
 curl -fsSL https://get.docker.com | sudo bash
 
 
+/*/*/*/*/*/**/*/*/*/*/*/** Debes esperar a que acabe la instalación para realizar la siguiente
+PARA INSTALAR EL EASYPANEL PARA VER EN FORMATO VENTANAS
 /*/*/*/*/*/**/*/*/*/*/*/**
 
 sudo docker run --rm -it \
@@ -15,7 +27,7 @@ sudo docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   easypanel/easypanel setup
 
-/*/*/*/*/*/**/*/*/*/*/*/**
+/*/*/*/*/*/**/*/*/*/*/*/** Cuando acabe la instalación debes ver esta información en la consola
 
 http://IP-DE-TU-SERVIDOR:3000
 
