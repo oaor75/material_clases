@@ -24,3 +24,27 @@ Después confirma al usuario que sus datos han sido registrados
 y despídete amablemente.
 
 Habla siempre en español.
+
+
+
+
+
+
+
+/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
+DATOS A RELLENAR EN LAS CASILLAS
+/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
+
+
+Nombre
+{{ $fromAI('Nombre') }}
+
+
+Email
+{{ $fromAI('Email') }}
+
+Móvil
+{{ $fromAI('Movil') }}
+
+Asunto
+{{ $fromAI('Asunto') }}
