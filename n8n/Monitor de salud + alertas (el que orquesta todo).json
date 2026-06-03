@@ -1,0 +1,89 @@
+{
+  "name": "VN-03 Health Monitor",
+  "nodes": [
+    {
+      "name": "Cron cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] }
+      }
+    },
+    {
+      "name": "Check MiniMax",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api-uw.minimax.io/v1/health",
+        "timeout": 5000,
+        "continueOnFail": true
+      }
+    },
+    {
+      "name": "Check Twilio",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_SID}}.json",
+        "authentication": "genericCredentialType",
+        "timeout": 5000,
+        "continueOnFail": true
+      }
+    },
+    {
+      "name": "Check App N8N",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://app8.eaglemarketing.tech/api/health",
+        "timeout": 5000,
+        "continueOnFail": true
+      }
+    },
+    {
+      "name": "Evaluar estado global",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "const minimax = $('Check MiniMax').context.responseCode === 200;\nconst twilio = $('Check Twilio').context.responseCode === 200;\nconst app = $('Check App N8N').context.responseCode === 200;\n\nconst canal_activo = minimax && twilio ? 'voz_minimax' : twilio ? 'voz_elevenlabs' : 'whatsapp_portal';\n\nreturn [{ json: { minimax, twilio, app, canal_activo, timestamp: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "name": "Guardar estado en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/system_health",
+        "method": "POST",
+        "body": "={{$json}}"
+      }
+    },
+    {
+      "name": "¿Hay algún sistema caído?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "boolean": [{
+            "value1": "={{!$json.minimax || !$json.twilio || !$json.app}}",
+            "value2": true
+          }]
+        }
+      }
+    },
+    {
+      "name": "Alerta WhatsApp admin",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/{{$env.WA_PHONE_ID}}/messages",
+        "method": "POST",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$env.ADMIN_WHATSAPP}}",
+          "text": {
+            "body": "🚨 Vida Natural — Sistema degradado:\nMiniMax: ={{$json.minimax ? '✅' : '❌'}}\nTwilio: ={{$json.twilio ? '✅' : '❌'}}\nApp: ={{$json.app ? '✅' : '❌'}}\nCanal activo: ={{$json.canal_activo}}\n{{new Date().toLocaleString('es-ES')}}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron cada 5 minutos": { "main": [["Check MiniMax", "Check Twilio", "Check App N8N"]] },
+    "Check App N8N": { "main": [["Evaluar estado global"]] },
+    "Evaluar estado global": { "main": [["Guardar estado en Supabase", "¿Hay algún sistema caído?"]] },
+    "¿Hay algún sistema caído?": { "main": [["Alerta WhatsApp admin"], []] }
+  }
+}

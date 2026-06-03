@@ -1,0 +1,359 @@
+{
+  "name": "Vida Natural — WhatsApp Pedidos",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Validación de tienda por WhatsApp\n\nFlujo:\n1. Webhook recibe el mensaje de WhatsApp.\n2. Se extrae el teléfono del remitente y el texto.\n3. **Buscar tienda**: SELECT por whatsapp_phone (normalizado, sin filtrar por status para poder distinguir 'bloqueada' de 'no registrada').\n4. IF status = 'activa' → continuar con extracción del pedido.\n   - IF status = 'bloqueada' → responder suspensión.\n   - resto (sin fila / pendiente) → responder no registrada.",
+        "height": 320,
+        "width": 460
+      },
+      "id": "note-1",
+      "name": "Documentación",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -40]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-pedidos",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [320, 200],
+      "webhookId": "whatsapp-pedidos"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-1",
+              "name": "registroLink",
+              "value": "https://app8.eaglemarketing.tech/registro-tienda",
+              "type": "string"
+            },
+            {
+              "id": "cfg-2",
+              "name": "adminPhone",
+              "value": "+34 600 000 000",
+              "type": "string"
+            },
+            {
+              "id": "cfg-3",
+              "name": "ordersWhatsapp",
+              "value": "+34 600 000 000",
+              "type": "string"
+            },
+            {
+              "id": "cfg-4",
+              "name": "graphApiBase",
+              "value": "https://graph.facebook.com/v21.0",
+              "type": "string"
+            },
+            {
+              "id": "cfg-5",
+              "name": "appApiBase",
+              "value": "https://app8.eaglemarketing.tech",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [540, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ex-1",
+              "name": "from_phone",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].from }}",
+              "type": "string"
+            },
+            {
+              "id": "ex-2",
+              "name": "message_text",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].text.body }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-extract",
+      "name": "Extraer mensaje",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [760, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, name, status\nFROM stores\nWHERE regexp_replace(coalesce(whatsapp_phone, ''), '\\D', '', 'g')\n    = regexp_replace($1, '\\D', '', 'g')\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.from_phone }}"
+        }
+      },
+      "id": "node-lookup",
+      "name": "Buscar tienda",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [980, 200],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CREDENCIAL_SUPABASE",
+          "name": "Supabase Vida Natural"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-activa",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "activa",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-if-activa",
+      "name": "IF status = activa",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-bloqueada",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "bloqueada",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-if-bloqueada",
+      "name": "IF status = bloqueada",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1420, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Config\"].json.graphApiBase }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $node[\"Extraer mensaje\"].json.from_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"Hola. Este número no está registrado como tienda de Vida Natural.\\nPara registrarte como tienda distribuidora, visita: {{ $node[\"Config\"].json.registroLink }}\\nSi ya eres cliente, escribe al {{ $node[\"Config\"].json.adminPhone }} para activar tu cuenta.\"\n  }\n}",
+        "options": {}
+      },
+      "id": "node-resp-noreg",
+      "name": "Responder: no registrada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Config\"].json.graphApiBase }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $node[\"Extraer mensaje\"].json.from_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"Tu cuenta está suspendida temporalmente.\\nContacta con Vida Natural para más información: {{ $node[\"Config\"].json.adminPhone }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "node-resp-blocked",
+      "name": "Responder: suspendida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "content": "## Continuación (tienda activa)\n\nAquí va la extracción del pedido en lenguaje natural:\n1. Nodo de IA (OpenAI/Antigravity) que parsea `message_text` a líneas { product_name, quantity }.\n2. POST al endpoint de la app `/api/n8n/orders` con store_id + items.\n3. Responder confirmación al cliente por WhatsApp.\n\nEl `store_id` y `store_name` vienen de **Buscar tienda**.",
+        "height": 280,
+        "width": 420,
+        "color": 4
+      },
+      "id": "note-2",
+      "name": "Nota continuación",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1640, -120]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ai-1",
+              "name": "_placeholder",
+              "value": "Sustituir por nodo de IA que extrae items del pedido desde message_text",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-ai-extract",
+      "name": "IA: Extraer pedido (placeholder)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1640, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Config\"].json.appApiBase }}/api/n8n/orders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"store_id\": \"{{ $node[\"Buscar tienda\"].json.id }}\",\n  \"source\": \"whatsapp\",\n  \"notes\": \"{{ $node[\"Extraer mensaje\"].json.message_text }}\",\n  \"items\": []\n}",
+        "options": {}
+      },
+      "id": "node-post-order",
+      "name": "POST /api/n8n/orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Config\"].json.graphApiBase }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $node[\"Extraer mensaje\"].json.from_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"¡Hola {{ $node[\"Buscar tienda\"].json.name }}! Hemos recibido tu pedido y lo estamos procesando. Te confirmamos pronto la entrega.\"\n  }\n}",
+        "options": {}
+      },
+      "id": "node-resp-ok",
+      "name": "Responder: confirmación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 140]
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Extraer mensaje", "type": "main", "index": 0 }]]
+    },
+    "Extraer mensaje": {
+      "main": [[{ "node": "Buscar tienda", "type": "main", "index": 0 }]]
+    },
+    "Buscar tienda": {
+      "main": [[{ "node": "IF status = activa", "type": "main", "index": 0 }]]
+    },
+    "IF status = activa": {
+      "main": [
+        [{ "node": "IA: Extraer pedido (placeholder)", "type": "main", "index": 0 }],
+        [{ "node": "IF status = bloqueada", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF status = bloqueada": {
+      "main": [
+        [{ "node": "Responder: suspendida", "type": "main", "index": 0 }],
+        [{ "node": "Responder: no registrada", "type": "main", "index": 0 }]
+      ]
+    },
+    "IA: Extraer pedido (placeholder)": {
+      "main": [[{ "node": "POST /api/n8n/orders", "type": "main", "index": 0 }]]
+    },
+    "POST /api/n8n/orders": {
+      "main": [[{ "node": "Responder: confirmación", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

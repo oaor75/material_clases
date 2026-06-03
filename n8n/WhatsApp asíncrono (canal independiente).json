@@ -1,0 +1,122 @@
+{
+  "name": "VN-02 WhatsApp Pedidos",
+  "nodes": [
+    {
+      "name": "Webhook WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "whatsapp-pedido",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "Extraer datos del mensaje",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "headers": {
+          "x-api-key": "{{$env.ANTHROPIC_API_KEY}}",
+          "anthropic-version": "2023-06-01"
+        },
+        "body": {
+          "model": "claude-sonnet-4-5",
+          "max_tokens": 500,
+          "system": "Extrae del mensaje de WhatsApp: tienda, productos y cantidades. Responde SOLO en JSON: {tienda: string, productos: [{nombre: string, cantidad: number}], fecha_entrega: string|null}",
+          "messages": [{
+            "role": "user",
+            "content": "={{$json.Body}}"
+          }]
+        }
+      }
+    },
+    {
+      "name": "Buscar tienda en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/stores?whatsapp_phone=eq.{{$json.From}}&status=eq.activa",
+        "method": "GET",
+        "headers": {
+          "apikey": "{{$env.SUPABASE_SERVICE_KEY}}"
+        }
+      }
+    },
+    {
+      "name": "¿Tienda registrada?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "number": [{
+            "value1": "={{$json.length}}",
+            "operation": "larger",
+            "value2": 0
+          }]
+        }
+      }
+    },
+    {
+      "name": "Crear pedido en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/orders",
+        "method": "POST",
+        "headers": {
+          "apikey": "{{$env.SUPABASE_SERVICE_KEY}}",
+          "Prefer": "return=representation"
+        },
+        "body": {
+          "store_id": "={{$node['Buscar tienda en Supabase'].json[0].id}}",
+          "source": "whatsapp",
+          "status": "pendiente",
+          "total_amount": 0,
+          "notes": "Pedido por WhatsApp"
+        }
+      }
+    },
+    {
+      "name": "Confirmar al cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/{{$env.WA_PHONE_ID}}/messages",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer {{$env.WA_TOKEN}}"
+        },
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$json.From}}",
+          "text": {
+            "body": "✅ Pedido recibido. Número: #={{$node['Crear pedido en Supabase'].json.id.slice(0,8).toUpperCase()}}. Te confirmamos pronto."
+          }
+        }
+      }
+    },
+    {
+      "name": "Tienda no registrada - respuesta",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/{{$env.WA_PHONE_ID}}/messages",
+        "method": "POST",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$json.From}}",
+          "text": {
+            "body": "Hola, este número no está registrado como tienda cliente de Vida Natural. Para registrarte visita: https://app8.eaglemarketing.tech/registro-tienda"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": { "main": [["Extraer datos del mensaje"]] },
+    "Extraer datos del mensaje": { "main": [["Buscar tienda en Supabase"]] },
+    "Buscar tienda en Supabase": { "main": [["¿Tienda registrada?"]] },
+    "¿Tienda registrada?": {
+      "main": [
+        ["Crear pedido en Supabase"],
+        ["Tienda no registrada - respuesta"]
+      ]
+    },
+    "Crear pedido en Supabase": { "main": [["Confirmar al cliente"]] }
+  }
+}

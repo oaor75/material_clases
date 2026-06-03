@@ -1,0 +1,107 @@
+{
+  "name": "VN-01 Agente Voz con Fallback",
+  "nodes": [
+    {
+      "name": "Webhook Twilio",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "twilio-voice",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "Health Check MiniMax",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api-uw.minimax.io/v1/health",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer {{$env.MINIMAX_API_KEY}}"
+        },
+        "timeout": 3000,
+        "continueOnFail": true
+      }
+    },
+    {
+      "name": "¿MiniMax responde?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "number": [{
+            "value1": "={{$node['Health Check MiniMax'].context.responseCode}}",
+            "operation": "equal",
+            "value2": 200
+          }]
+        }
+      }
+    },
+    {
+      "name": "Activar MiniMax",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://app8.eaglemarketing.tech/api/voice/route",
+        "method": "POST",
+        "body": {
+          "provider": "minimax",
+          "call_sid": "={{$json.CallSid}}",
+          "from": "={{$json.From}}"
+        }
+      }
+    },
+    {
+      "name": "Activar ElevenLabs Fallback",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://app8.eaglemarketing.tech/api/voice/route",
+        "method": "POST",
+        "body": {
+          "provider": "elevenlabs",
+          "call_sid": "={{$json.CallSid}}",
+          "from": "={{$json.From}}"
+        }
+      }
+    },
+    {
+      "name": "Alerta Admin - MiniMax caído",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api.whatsapp.com/send",
+        "method": "POST",
+        "body": {
+          "to": "{{$env.ADMIN_WHATSAPP}}",
+          "message": "⚠️ MiniMax caído. Activado ElevenLabs automáticamente. Hora: {{$now}}"
+        }
+      }
+    },
+    {
+      "name": "Log en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "{{$env.SUPABASE_URL}}/rest/v1/voice_call_logs",
+        "method": "POST",
+        "headers": {
+          "apikey": "{{$env.SUPABASE_SERVICE_KEY}}",
+          "Authorization": "Bearer {{$env.SUPABASE_SERVICE_KEY}}"
+        },
+        "body": {
+          "call_sid": "={{$json.CallSid}}",
+          "from_phone": "={{$json.From}}",
+          "provider_used": "={{$node['¿MiniMax responde?'].context.noMatch ? 'elevenlabs' : 'minimax'}}",
+          "outcome": "iniciada"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Twilio": { "main": [["Health Check MiniMax"]] },
+    "Health Check MiniMax": { "main": [["¿MiniMax responde?"]] },
+    "¿MiniMax responde?": {
+      "main": [
+        ["Activar MiniMax"],
+        ["Activar ElevenLabs Fallback", "Alerta Admin - MiniMax caído"]
+      ]
+    },
+    "Activar MiniMax": { "main": [["Log en Supabase"]] },
+    "Activar ElevenLabs Fallback": { "main": [["Log en Supabase"]] }
+  }
+}
